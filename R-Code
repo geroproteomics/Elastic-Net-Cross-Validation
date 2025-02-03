@@ -1,0 +1,330 @@
+#function that performs elastic ney modeling and returns df of optimized lambda values, beta coefficients for all traits/proteins, counts of selected features
+#input parameters include dataframe holding expression values, proteins, traits, alpha, iterations
+en_repeat_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, heatmap=FALSE){
+  #clin_df: df of all proteins, clinical traits, controls
+  #protein_list: list of proteins and continuous controls
+  #control_list: list of categorical controls
+  #trait_list: list of traits
+  #alpha: alpha parameter for elastic net
+  #iterations: number of time the elastic net modeling will repeat
+  
+  #default is no heatmap
+  p <- NA
+  
+  #Setup backend to use many processors
+  #totalCores = detectCores()
+  #Leave one core to avoid overload your computer
+  #cluster <- makeCluster(totalCores[1]-1)
+  #registerDoParallel(cluster)
+  
+  #df to hold optimized alpha and lambda for each clinical trait
+  alpha_lambda <- as.data.frame(matrix(NA, ncol=2, nrow=length(trait_list)))
+  colnames(alpha_lambda) <- c("alpha","lambda")
+  rownames(alpha_lambda) <- trait_list
+  alpha_lambda$alpha = alpha
+  
+  if(!NA %in% cont_control & !NA %in% cat_control){
+    #Build matrix to hold coefficients using optimized model with best alpha and lambda for each clinical trait
+    coef_glmnet <- as.data.frame(matrix(NA,nrow = length(trait_list), ncol = length(c(cat_control,cont_control,protein_list))))
+    rownames(coef_glmnet) <- trait_list
+    colnames(coef_glmnet) <- c(cat_control,cont_control,protein_list)
+  }
+  if(NA %in% cont_control & !NA %in% cat_control){
+    #Build matrix to hold coefficients using optimized model with best alpha and lambda for each clinical trait
+    coef_glmnet <- as.data.frame(matrix(NA,nrow = length(trait_list), ncol = length(c(cat_control,protein_list))))
+    rownames(coef_glmnet) <- trait_list
+    colnames(coef_glmnet) <- c(cat_control,protein_list)
+  }
+  if(!NA %in% cont_control & NA %in% cat_control){
+    #Build matrix to hold coefficients using optimized model with best alpha and lambda for each clinical trait
+    coef_glmnet <- as.data.frame(matrix(NA,nrow = length(trait_list), ncol = length(c(cont_control,protein_list))))
+    rownames(coef_glmnet) <- trait_list
+    colnames(coef_glmnet) <- c(cont_control,protein_list)
+  }
+  if(NA %in% cont_control & NA %in% cat_control){
+    #Build matrix to hold coefficients using optimized model with best alpha and lambda for each clinical trait
+    coef_glmnet <- as.data.frame(matrix(NA,nrow = length(trait_list), ncol = length(c(protein_list))))
+    rownames(coef_glmnet) <- trait_list
+    colnames(coef_glmnet) <- c(protein_list)
+  }
+  
+  #for each clinical trait: run 1 iteration of glmnet to find optimixed alpha, lambda: calculate BAge, for each trait, fill tables
+  for (val in 1:length(trait_list)){
+    ##make coef_glmnet with train data
+    #remove all rows missing the clinical trait
+    values_subset <- clin_df[complete.cases(clin_df[,trait_list[val]]),]
+    #isolate predictor proteins and controls only
+    if(NA %in% cont_control & NA %in% cat_control){
+      proteins_subset <- as.data.frame(values_subset[,c(protein_list)])
+    }
+    if(!NA %in% cont_control & NA %in% cat_control){
+      proteins_subset <- as.data.frame(values_subset[,c(cont_control,protein_list)])
+    }
+    if(NA %in% cont_control & !NA %in% cat_control){
+      proteins_subset <- as.data.frame(values_subset[,c(cat_control,protein_list)])
+    }
+    if(!NA %in% cont_control & !NA %in% cat_control){
+      proteins_subset <- as.data.frame(values_subset[,c(cont_control,cat_control,protein_list)])
+    }
+    #scale proteins and continuous controls
+    if(!NA %in% cont_control){
+      for(val2 in c(cont_control,protein_list)){
+        proteins_subset[,val2] <- scale(proteins_subset[,val2])
+      }
+    }
+    if(NA %in% cont_control){
+      for(val2 in protein_list){
+        proteins_subset[,val2] <- scale(proteins_subset[,val2])
+      }
+    }
+    #subset to one clinical trait
+    clin_subset <- as.data.frame(scale(values_subset[,trait_list[val]]))
+    colnames(clin_subset) <- trait_list[val]
+    #set seed for reproducibility
+    set.seed(1)
+    ##set foldid for reproducibility
+    foldid_cont <- sample(1:10, size = nrow(clin_subset), replace = TRUE)
+    #find selection of proteins using elastic net
+    cvfit_subset <- cv.glmnet(as.matrix(proteins_subset),unlist(clin_subset), parallel=TRUE, standardize=FALSE, alpha=alpha,folid=foldid_cont)
+    #using optimized lambda, find coefficients and fill df
+    if(NA %in% cat_control & NA %in% cont_control){
+      coef_glmnet[trait_list[val],] <- as.numeric(coef(cvfit_subset, s = "lambda.min")[c(1:length(c(protein_list))+1)])
+    }
+    if(!NA %in% cat_control & NA %in% cont_control){
+      coef_glmnet[trait_list[val],] <- as.numeric(coef(cvfit_subset, s = "lambda.min")[c(1:length(c(cat_control,protein_list))+1)])
+    }
+    if(NA %in% cat_control & !NA %in% cont_control){
+      coef_glmnet[trait_list[val],] <- as.numeric(coef(cvfit_subset, s = "lambda.min")[c(1:length(c(cont_control,protein_list))+1)])
+    }
+    if(!NA %in% cat_control & !NA %in% cont_control){
+      coef_glmnet[trait_list[val],] <- as.numeric(coef(cvfit_subset, s = "lambda.min")[c(1:length(c(cat_control,cont_control,protein_list))+1)])
+    }
+  }
+  coef_glmnet <- as.data.frame(coef_glmnet)
+  #Stop cluster
+  #stopCluster(cluster)
+  
+  if(heatmap == TRUE){
+    #heatmap plot for all glmnet coefficients
+    p <- heatmaply(coef_glmnet,
+                   dendrogram = "column",
+                   k_col = 4,
+                   distfun = "spearman",
+                   xlab = "", ylab = "",
+                   main = "",
+                   #scale = "column",
+                   margins = c(60,100,40,20),
+                   grid_color = "white",
+                   grid_width = 0.00001,
+                   titleX = FALSE,
+                   hide_colorbar = FALSE,
+                   branches_lwd = 0.1,
+                   label_names = c("Clinical Trait", "Protein", "BTrait"),
+                   fontsize_row = 16, fontsize_col = 12,
+                   labCol = colnames(coef_glmnet),
+                   labRow = rownames(coef_glmnet),
+                   title = "Protein Beta by Clincal Trait",
+                   heatmap_layers = theme(axis.line=element_blank()),
+                   #row_side_colors = alpha_lambda[, "alpha"],
+                   #row_side_palette= ByPal,
+                   #cellnote = Stars,
+                   scale_fill_gradient_fun = ggplot2::scale_fill_gradientn(colours = c("#2E5894","#7392BA","#96AFCD","#B8CCE0","#DBE9F3","white", "#F6BDC0", "#F1959B", "#F07470","#EA4C46","#DC1C13"),
+                                                                           values = scales::rescale(c(min(coef_glmnet),-0.5,-0.4,-0.2,-0.001, 0, 0.001,0.25,0.5,0.75,max(coef_glmnet))))
+    )
+  }
+  
+  #count IV proteins per trait
+  #table to hold IV sums per clinical trait
+  IV_sums <- as.data.frame(matrix(NA,nrow=length(trait_list),ncol=1))
+  rownames(IV_sums) <- trait_list
+  colnames(IV_sums) <- c("IV_Count")
+  for(i in trait_list){
+    IV_sums[i,] <- length(coef_glmnet[i,coef_glmnet[i,]!=0])
+  }
+  #make bar graph with IV_sums
+  #add clin to column for x label
+  IV_sums$clin <- trait_list
+  plot_ivsum <- ggplot(data=IV_sums, aes(x = fct_inorder(clin), y = IV_Count)) +
+    theme_classic() +
+    geom_bar(stat = "identity", position = position_dodge(), color = "blue", fill = "grey")+
+    ggtitle("Sum Elastic Net Selected Proteins") +
+    ylab("Predictor Variable Sum") +
+    xlab("Clinical Trait") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), text = element_text(size = 16)) +
+    geom_hline(yintercept=length(c(protein_list,control_list)), color = "red", linetype = "dashed", linewidth= 0.75)
+  
+  #order optimized lambdas
+  alpha_lambda <- alpha_lambda[rev(order(alpha_lambda$lambda)),]
+  #return beta coefficients, optimized lambda values, heatmap of coef, bar graph of IV sums
+  list <- list("coef" = coef_glmnet, "lambda" = alpha_lambda, "heatmap" = p, "ivsum" = plot_ivsum)
+  return(list)
+}
+
+#Function that performs elastic net modeling using previous function
+#Performs cross validation using Caret, accepts table with lists of proteins by tissue, trait list, selects top ENSPs, conducts CV with caret
+#returns lisp of top ENSPs, df of 10 iterations of CV R-Squared
+en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, num_ensp, composite=FALSE, direction="up",study="B",translate=TRUE){
+  
+  #Setup backend to use many processors
+  totalCores = detectCores()
+  #Leave one core to avoid overload your computer
+  cluster <- makeCluster(totalCores[1]-1)
+  registerDoParallel(cluster)
+  
+  ##make master list of top ensps by tissue and trait
+  df_master_ensp <- vector(mode = "list", length = 0)
+  
+  ##make df to hold all Rsquared for 10 trials for all traits and tissues
+  df_master_Rsquared <- as.data.frame(matrix(NA,nrow=0,ncol=3))
+  colnames(df_master_Rsquared) <- c("Rsquared","Tissue","Trait")
+  
+  ##combine all proteins 
+  #temp_proteins <- NULL
+  #for(val2 in names(protein_list)){
+  #  temp_proteins <- c(temp_proteins,protein_list[[val2]])
+  #}
+  #convert protein list to BLSA nomenclature 
+  #temp_proteins <- df_sencat_blsa[df_sencat_blsa$gene %in% temp_proteins, "unique_gene"]
+  
+  ##determine ENSPs for all traits
+  #temp_en_object <- en_repeat_fast(clin_df, temp_proteins, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
+  #pull coef df
+  #temp_en_coef <- temp_en_object$coef
+  
+  ##loop through sets of proteins, find ensp, cv predictive potential 
+  for(val in names(protein_list)){
+    ##make df to hold ENSPs for each trait
+    df_ensps_per_trait <- as.data.frame(matrix(NA,nrow=num_ensp,ncol=length(trait_list)))
+    colnames(df_ensps_per_trait) <- trait_list
+    
+    ##determine ENSPs for all traits
+    if(translate == TRUE){
+      #check if translation is needed
+      #convert protein list to BLSA/InCHIANTI nomenclature
+      if(study == "B"){
+        temp_proteins <- df_sencat_blsa[df_sencat_blsa$gene %in% protein_list[[val]], "unique_gene"]
+      }
+      if(study == "I"){
+        temp_proteins <- df_sencat_inchianti[df_sencat_inchianti$gene %in% protein_list[[val]], "unique_gene"]
+      }
+    }
+    if(translate == FALSE){
+      temp_proteins <- protein_list[[val]]
+    }
+    temp_en_object <- en_repeat_fast(clin_df, temp_proteins, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
+    #pull coef df
+    temp_en_coef_subset <- temp_en_object$coef
+    
+    ##subset coef to only protein present in particular tissue
+    #tissue_specific_proteins <- protein_list[[val]]
+    #tissue_specific_proteins <- df_sencat_blsa[df_sencat_blsa$gene %in% tissue_specific_proteins,"unique_gene"]
+    #temp_en_coef_subset <- temp_en_coef[,colnames(temp_en_coef) %in% tissue_specific_proteins]
+    
+    #loop through all clinical traits; find cv Rsquared
+    for(i in trait_list){
+      #subset to only rows with trait listed
+      clin_df_i <- clin_df[!is.na(clin_df[,i]),]
+      #scale trait
+      clin_df_i[,i] <- as.numeric(scale(clin_df_i[,i]))
+      #if composite is false, select all ENSP and use for predictive potential
+      if(composite == FALSE){
+        #find ensps, subset to specific number 
+        temp_ensps <- temp_en_coef_subset[i,temp_en_coef_subset[i,] != 0]
+        temp_ensps <- temp_ensps[!colnames(temp_ensps) %in% c(cat_control,cont_control)]
+        #proceed if 1+ ENSPs identified
+        if(length(temp_ensps) >0){
+          temp_ensps <- t(temp_ensps)
+          temp_ensps <- as.data.frame(temp_ensps)
+          #add dummy column for re-ordering 
+          temp_ensps$dumb <- NA
+          temp_ensps <- temp_ensps[rev(order(abs(temp_ensps[,i]))),]
+          if(nrow(temp_ensps) <=num_ensp){
+            temp_ensps <- rownames(temp_ensps)
+          }
+          else{
+            temp_ensps <- rownames(temp_ensps)[1:num_ensp]
+          }
+          #fill df of specified number of ENSPs per trait
+          df_ensps_per_trait[1:length(temp_ensps),i] <- temp_ensps
+          ##scale ENSPS
+          clin_df_i[,temp_ensps] <- scale(clin_df_i[,temp_ensps])
+          #make IV list using ensps
+          IV <- paste(" ~ `",paste(c(temp_ensps),collapse="` + `"),"`",sep="")
+          #create forumula
+          form <- as.formula(paste("`",i,"`",IV, sep=""))
+          ##carot CV
+          #train the control
+          train_control <- trainControl(method="cv", number=10, seeds=seeds_reproducible)
+          #train model
+          model <- train(form,
+                         data = clin_df_i,
+                         method = "lm",
+                         trControl = train_control,
+                         metric="Rsquared")
+          #find 10 iterations of Rsquared
+          cv_Rsquared <- model$resample$Rsquared
+          #fill master DF with Rsquared, tissue, trait
+          temp_df <- cbind(cv_Rsquared,rep(val,10),rep(i,10))
+          colnames(temp_df) <- c("Rsquared","Tissue","Trait")
+          df_master_Rsquared <- rbind(df_master_Rsquared,temp_df)
+        }
+      }
+      if(composite == TRUE){
+        #find ensps, subset to specific number 
+        if(direction == "up"){
+          temp_ensps <- temp_en_coef_subset[i,temp_en_coef_subset[i,] > 0]
+        }
+        if(direction == "down"){
+          temp_ensps <- temp_en_coef_subset[i,temp_en_coef_subset[i,] < 0]
+        }
+        temp_ensps <- temp_ensps[!colnames(temp_ensps) %in% c(cat_control,cont_control)]
+        #proceed if 1+ ENSPs identified
+        if(length(temp_ensps) >1){
+          temp_ensps <- t(temp_ensps)
+          temp_ensps <- as.data.frame(temp_ensps)
+          #add dummy column for re-ordering 
+          temp_ensps$dumb <- NA
+          temp_ensps <- temp_ensps[rev(order(abs(temp_ensps[,i]))),]
+          if(nrow(temp_ensps) <=num_ensp){
+            temp_ensps <- rownames(temp_ensps)
+          }
+          else{
+            temp_ensps <- rownames(temp_ensps)[1:num_ensp]
+          }
+          #fill df of specified number of ENSPs per trait
+          df_ensps_per_trait[1:length(temp_ensps),i] <- temp_ensps
+          ##make composite score
+          clin_df_i$composite_score <- scale(rowMeans(clin_df_i[,temp_ensps]))
+          #make IV list using ensps
+          #IV <- paste(" ~ `",paste(c(temp_ensps),collapse="` + `"),"`",sep="")
+          IV <- paste(" ~ composite_score")
+          #create forumula
+          form <- as.formula(paste("`",i,"`",IV, sep=""))
+          ##carot CV
+          #train the control
+          train_control <- trainControl(method="cv", number=10, seeds=seeds_reproducible)
+          #train model
+          model <- train(form,
+                         data = clin_df_i,
+                         method = "lm",
+                         trControl = train_control,
+                         metric="Rsquared")
+          #find 10 iterations of Rsquared
+          cv_Rsquared <- model$resample$Rsquared
+          #fill master DF with Rsquared, tissue, trait
+          temp_df <- cbind(cv_Rsquared,rep(val,10),rep(i,10))
+          colnames(temp_df) <- c("Rsquared","Tissue","Trait")
+          df_master_Rsquared <- rbind(df_master_Rsquared,temp_df)
+        }
+      }
+    }
+    df_master_ensp[[val]] <- df_ensps_per_trait
+  }
+  
+  #Stop cluster
+  stopCluster(cluster)
+  
+  #return list of accuracy and ensp by trait
+  list <- list("Rsquared" = df_master_Rsquared, "ensp_table" = df_master_ensp)
+  return(list)
+}
