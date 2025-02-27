@@ -71,7 +71,7 @@ Result dataframes are configured for easy plotting to compare predictive ability
 glmnet  
 ggplot2  
 heatmaply  
-doParallel
+doParallel  
 caret
 
 ## Notes  
