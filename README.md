@@ -61,8 +61,9 @@ One downside of elastic net modeling using common R functions such as cv.glmnet 
 | Feature 49     | Feature 50     | Feature 47     |
 
 
+Result dataframes are configured for easy plotting to compare predictive ability of models trained using each list of features.  
 <p align="center">
-  <img src="images/Example_ivsum.JPG" alt="Example Image of Selected Features" width="500">
+  <img src="images/cvrsquared.JPG" alt="Example Image of Selected Features" width="500">
 </p>
 
 
