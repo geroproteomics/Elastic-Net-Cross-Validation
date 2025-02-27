@@ -1,35 +1,32 @@
 # Elastic-Net-Cross-Validation
 Functions that perform elastic net modeling using given features and covariates
 
-**R Function Names**  
-en_repeat_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
-en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, num_ensp, composite=FALSE, direction="up",translate=TRUE)
+**R Functions**   
+en_cv_test_fast(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, num_ensp, composite=FALSE, direction="up")
+en_repeat_fast(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
 
 
 ## Overview  
 Elastic net is a form of penalized linear regression that performs feature selection by shrinking beta coefficients of predictor variables using a penalty term, 
-the stength of which is determined using a hyperperamater lambda, with a smaller lambda selecting more predictor terms, and larger selecting fewer. A range of values are used for lambda,
-and ultimately the model using the lambda value and selected features that produces the lowest mean squared error (MSE) are found. In this way, Elastic Net can be used to identify important 
-features, for example gene expression levels, implicated in clinical parameters (age, bmi, etc.).
+the stength of which is determined using a hyperperamater lambda, with a smaller lambda selecting more predictor terms, and larger selecting fewer. A range of values are used for lambda for cross validation, and ultimately the model using the lambda value and selected features that produces the lowest mean squared error (MSE) are found. In this way, Elastic Net can be used to identify important features, for example gene expression levels, implicated in clinical parameters (age, bmi, etc.).
 
-One downside of elastic net modeling using common R functions such as cv.glmnet is the variability of the output, as train and test sets are selected randomly. This function reduces variability 
-and increases the robustness of results by repeating elastic net modeling in R using the glmnet package a user-specified number of times, averages the output, and produces a lambda value and set 
-of selected features that produce the lowest MSE across many trials. This function also auto-scales features, uses parallel processing for faster output, and automates useful visualizations of the selected features.
+One downside of elastic net modeling using common R functions such as cv.glmnet is the variability of the output, as folds for cross validation are selected randomly. This function ensures reproducibility during elastic net modeling by setting explicit fold IDs, performs cross validation reprodicibly using the caret package, auto-scales features, uses parallel processing for faster output, and produces a table indicating out-of-sample predictive ability of each set of features and for each parameter, as well as a list of selected features per parameter.
 
 
 ## Usage  
-EN_Repeat_Results <- EN_Repeat(clin_df, protein_list, control_list, trait_list, alpha, iterations, heatmap=FALSE)
 
 **Arguments**  
-| Parameter       | Type        | Description                                                                                             |
-|----------------|-------------|---------------------------------------------------------------------------------------------------------|
-| `clin_df `     | `dataframe` | Table of microarray data containing gene expression values and covariates by columns, sample IDs by row |
-| `protein_list` | `vector `   | Vector of genes from which to perform feature selection, and any continuous covariates                  |
-| `control_list` | `vector `   | Vector of categorical covariates                                                                        |
-| `trait_list`   | `vector `   | Vector of continuous traits for which to select implicated features                                     |
-| `alpha`        | `numeric `  | Number indicating hyperparameter alpha (0 for ridge, 1 for lasso, in-between for Elastic Net)           |
-| `interations`  | `numeric `  | Number indicating the number of times the analysis will be run                                          |
-| `heatmap`      | `boolean `  | Boolean value determining if a heatmap displaying effect size by feature and trait will be returned     |
+| Parameter       | Type        | Description                                                                                                    |
+|----------------|-------------|-----------------------------------------------------------------------------------------------------------------|
+| `clin_df `     | `dataframe` | Table of microarray data containing gene expression values and covariates by columns, sample IDs by row         |
+| `protein_list` | `vector `   | Vector of genes from which to perform feature selection, and any continuous covariates                          |
+| `cat_control`  | `vector `   | Vector of categorical covariates                                                                                |
+| `cont_control` | `vector `   | Vector of continuous covariates                                                                                 |
+| `trait_list`   | `list `     | Vector of continuous or categorical traits for which to select implicated features                              |
+| `alpha`        | `numeric `  | Number indicating hyperparameter alpha (0 for ridge, 1 for lasso, in-between for Elastic Net)                   |
+| `num_ensp`     | `numeric `  | Number indicating a limit of features selected per paramter                                                     |
+| `composite`    | `boolean `  | Boolean value determining selected features will be condensed into a mean composite score                       |
+| `direction`    | `string `   | String "up" or "down" indicating if features positively or negatively associated with parameters will be used   |
 
 ## Return Values  
 - Coef is a table showing the penalized effect size of each feature for each supplied trait.
