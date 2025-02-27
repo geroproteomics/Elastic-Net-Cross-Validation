@@ -1,5 +1,3 @@
-#function that performs elastic ney modeling and returns df of optimized lambda values, beta coefficients for all traits/proteins, counts of selected features
-#input parameters include dataframe holding expression values, proteins, traits, alpha, iterations
 en_repeat_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, heatmap=FALSE){
   #clin_df: df of all proteins, clinical traits, controls
   #protein_list: list of proteins and continuous controls
@@ -163,7 +161,7 @@ en_repeat_fast <- function(clin_df, protein_list, cat_control, cont_control, tra
 #Function that performs elastic net modeling using previous function
 #Performs cross validation using Caret, accepts table with lists of proteins by tissue, trait list, selects top ENSPs, conducts CV with caret
 #returns lisp of top ENSPs, df of 10 iterations of CV R-Squared
-en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, num_ensp, composite=FALSE, direction="up",study="B",translate=TRUE){
+en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, trait_list, alpha, num_ensp, composite=FALSE, direction="up"){
   
   #Setup backend to use many processors
   totalCores = detectCores()
@@ -178,19 +176,6 @@ en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, tr
   df_master_Rsquared <- as.data.frame(matrix(NA,nrow=0,ncol=3))
   colnames(df_master_Rsquared) <- c("Rsquared","Tissue","Trait")
   
-  ##combine all proteins 
-  #temp_proteins <- NULL
-  #for(val2 in names(protein_list)){
-  #  temp_proteins <- c(temp_proteins,protein_list[[val2]])
-  #}
-  #convert protein list to BLSA nomenclature 
-  #temp_proteins <- df_sencat_blsa[df_sencat_blsa$gene %in% temp_proteins, "unique_gene"]
-  
-  ##determine ENSPs for all traits
-  #temp_en_object <- en_repeat_fast(clin_df, temp_proteins, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
-  #pull coef df
-  #temp_en_coef <- temp_en_object$coef
-  
   ##loop through sets of proteins, find ensp, cv predictive potential 
   for(val in names(protein_list)){
     ##make df to hold ENSPs for each trait
@@ -198,19 +183,7 @@ en_cv_test_fast <- function(clin_df, protein_list, cat_control, cont_control, tr
     colnames(df_ensps_per_trait) <- trait_list
     
     ##determine ENSPs for all traits
-    if(translate == TRUE){
-      #check if translation is needed
-      #convert protein list to BLSA/InCHIANTI nomenclature
-      if(study == "B"){
-        temp_proteins <- df_sencat_blsa[df_sencat_blsa$gene %in% protein_list[[val]], "unique_gene"]
-      }
-      if(study == "I"){
-        temp_proteins <- df_sencat_inchianti[df_sencat_inchianti$gene %in% protein_list[[val]], "unique_gene"]
-      }
-    }
-    if(translate == FALSE){
-      temp_proteins <- protein_list[[val]]
-    }
+    temp_proteins <- protein_list[[val]]
     temp_en_object <- en_repeat_fast(clin_df, temp_proteins, cat_control, cont_control, trait_list, alpha, heatmap=FALSE)
     #pull coef df
     temp_en_coef_subset <- temp_en_object$coef
