@@ -19,38 +19,62 @@ One downside of elastic net modeling using common R functions such as cv.glmnet 
 | Parameter       | Type        | Description                                                                                                    |
 |----------------|-------------|-----------------------------------------------------------------------------------------------------------------|
 | `clin_df `     | `dataframe` | Table of microarray data containing gene expression values and covariates by columns, sample IDs by row         |
-| `protein_list` | `vector `   | Vector of genes from which to perform feature selection, and any continuous covariates                          |
+| `protein_list` | `vector `   | Vector containing lists of genes from which to perform feature selection                                        |
 | `cat_control`  | `vector `   | Vector of categorical covariates                                                                                |
 | `cont_control` | `vector `   | Vector of continuous covariates                                                                                 |
-| `trait_list`   | `list `     | Vector of continuous or categorical traits for which to select implicated features                              |
+| `trait_list`   | `vector `   | Vector of continuous or categorical traits for which to select implicated features                              |
 | `alpha`        | `numeric `  | Number indicating hyperparameter alpha (0 for ridge, 1 for lasso, in-between for Elastic Net)                   |
 | `num_ensp`     | `numeric `  | Number indicating a limit of features selected per paramter                                                     |
 | `composite`    | `boolean `  | Boolean value determining selected features will be condensed into a mean composite score                       |
 | `direction`    | `string `   | String "up" or "down" indicating if features positively or negatively associated with parameters will be used   |
 
 ## Return Values  
-- Coef is a table showing the penalized effect size of each feature for each supplied trait.
-- Lambda is a table showing the supplied alpha and optimized lambda across many runs for each parameter of the trait_list.
-- Heatmap is a graphical representation of the penalized effect size of each feature for each supplied trait.
+- df_master_Rsquared is a table containing R-Sqaured values from ten rounds of cross validation for each list of features and for each parameter.
 
-<p align="center">
-  <img src="images/Example_heatmap2.JPG" alt="Example Image of Selected Features" width="500">
-</p>
+| Rsquared       | Feature List| Parameter         |
+|----------------|-------------|-------------------|
+| 0.38           | Tissue 1    | Parameter 1       |
+| 0.43           | Tissue 1    | Parameter 2       |
+| 0.29           | Tissue 1    | Parameter 3       |
+| 0.40           | Tissue 1    | Parameter 4       |
+| 0.35           | Tissue 1    | Parameter 5       |
+| 0.53           | Tissue 2    | Parameter 1       |
+| 0.61           | Tissue 2    | Parameter 2       |
+| 0.70           | Tissue 2    | Parameter 3       |
+| 0.59           | Tissue 2    | Parameter 4       |
+| 0.65           | Tissue 2    | Parameter 5       |
 
-- IVSum is a bar graph respresenting the number of selected features for each supplied parameter. Example image shows 100 possible features and 2 covariates.
+
+- df_master_ensp is a vector of tables that shows the selected features from each list of features and for each parameter.
+
+| Parameter 1    | Parameter 2    | Parameter 3    |
+|----------------|----------------|----------------|
+| Feature 1      | Feature 2      | Feature 8      |
+| Feature 8      | Feature 4      | Feature 10     |
+| Feature 12     | Feature 6      | Feature 14     |
+| Feature 15     | Feature 10     | Feature 29     |
+| Feature 18     | Feature 13     | Feature 33     |
+| Feature 21     | Feature 19     | Feature 39     |
+| Feature 23     | Feature 20     | Feature 41     |
+| Feature 24     | Feature 39     | Feature 44     |
+| Feature 31     | Feature 42     | Feature 45     |
+| Feature 49     | Feature 50     | Feature 47     |
+
 
 <p align="center">
   <img src="images/Example_ivsum.JPG" alt="Example Image of Selected Features" width="500">
 </p>
+
 
 ## Dependencies  
 glmnet  
 ggplot2  
 heatmaply  
 doParallel
+caret
 
 ## Notes  
-This function will produce an error if the heatmap functionality is set to true and any of the parameters have 0 selected features. If this error occurs, set heatmap to false.
+The default train/test selection is 90% Train, 10% Test, though this can be easily changed within the caret function.
 
 ## Author  
 Bradley Olinger, PhD  
